@@ -2,6 +2,7 @@ from pymediainfo import MediaInfo
 import moviepy.editor as mp
 import matplotlib.pyplot as plt
 from pydub import AudioSegment, silence
+from dateutil import parser
 
 class Media:
     """A class for an media fragment.
@@ -68,9 +69,20 @@ class Media:
         if not self.meta['duration'] in range(360000000):  # Max duration of 100 hours.
             raise ValueError("Duration is not between 0 and 100 hours for file '{}'".format(file))
 
-        # Check creation date for correct type
-        if not isinstance(self.meta['date_created'], str):
-            raise TypeError("Creation date is not a string for file '{}'".format(file))
+        # Check creation date for correct type and format
+        date = self.meta['date_created']
+        if not isinstance(date, str):
+            raise TypeError("Creation date {} is not a string for file '{}'".format(date, file))
+        dt = parser.parse(date[4:])
+        if not (date[0:4] == 'UTC ' and 
+                int(date[4:8]) == dt.year and 
+                int(date[9:11]) == dt.month and 
+                int(date[12:14]) == dt.day and
+                int(date[15:17]) == dt.hour and
+                int(date[18:20]) == dt.minute and
+                int(date[21:23]) == dt.second and
+                int(date[24:])*1000 == dt.microsecond):
+            raise ValueError("Creation date {} is not of a correct format for file {}".format(date, file))
 
     def print_metadata(self, *args:'list') -> None:
         """Prints the requested metadata, or all if not specified.
@@ -107,7 +119,7 @@ class Media:
 
 
 class Audio(Media):
-    """A class for an audio fragment.
+    """A class for an audio fragment extending the Media class.
 
     Attributes:
     meta (dict): contains the metadata of the file.
@@ -182,7 +194,7 @@ class Audio(Media):
 
 
 class Video(Media):
-    """A class for an video fragment.
+    """A class for an video fragment extending the Media class.
 
     Attributes:
     meta (dict): contains the metadata of the file.
@@ -190,21 +202,18 @@ class Video(Media):
     Methods:
     print_metadata(): 
         Prints the requested metadata, or all if not specified.
-    extract_audio(desired_format:'str'):
-        Extracts the audio and saves to a new file in the desired format, and returns a new Audio object.
+    extract_audio():
+        Extracts the audio and saves to a new file in Wave format, and returns a new Audio object.
     """
 
-    def extract_audio(self, desired_format:'str'):
-        """Extracts the audio and saves to a new file in the desired format, and returns a new Audio object.
-
-        Parameters:
-        desired_format (str): desired format of the new audio file, e.g. 'mp3'.
+    def extract_audio(self):
+        """Extracts the audio and saves to a new file in Wave format, and returns a new Audio object.
 
         Returns:
         Audio object: A new audio object for the newly made file.
         """
         clip = mp.VideoFileClip(self.meta['file_name'])
-        new_filename = self.meta['name']+"."+desired_format.lstrip('.')
+        new_filename = self.meta['name']+".wav"
         clip.audio.write_audiofile(new_filename)
         return Audio(new_filename)
 
