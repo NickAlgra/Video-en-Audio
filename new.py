@@ -1,22 +1,34 @@
-import sys
 from pymediainfo import MediaInfo
 import moviepy.editor as mp
-from pprint import pprint
 import matplotlib.pyplot as plt
-import numpy as np
-import subprocess as sp
 from pydub import AudioSegment, silence
 
+class Media:
+    """A class for an media fragment.
 
-class Audio:
+    Attributes:
+    meta (dict): contains the metadata of the file.
+
+    Methods:
+    print_metadata(): 
+        Prints the requested metadata, or all if not specified.
+    """
     
     def __init__(self, file:'str') -> None:
+        """Initialises the metadata for the given file.
+
+        Parameters:
+        file (str): complete name of the file
+        """
         self.meta = {}
+        self.meta['file_name'] = file
+        split_name = file.rsplit('.', 1)
+        if len(split_name) < 2:
+            raise ValueError("No extension found for file '{}'".format(file))
+        self.meta['name'], self.meta['extension'] = split_name
         # Use pymediainfo to get the metadata for a file.
         # The relevant metadata is picked from the appropriate 'tracks' and added to the object as a dict.
         try:
-            self.meta['file_name'] = file
-            self.meta['name'], self.meta['extension'] = file.rsplit('.', 1)
             self.full_metadata = MediaInfo.parse(file)
             for track in self.full_metadata.tracks:
                 data = track.to_data()
@@ -26,8 +38,14 @@ class Audio:
                     self.meta['format'] = data['format']
                     self.meta['date_created'] = data['file_creation_date']
 
+                elif track.track_type == "Video":
+                    self.meta['video_bit_rate'] = data['bit_rate']
+                    self.meta['frame_rate'] = data['frame_rate']
+                    self.meta['height'] = data['height']
+                    self.meta['width'] = data['width']
+
                 elif track.track_type == "Audio":
-                    self.meta['bit_rate'] = data['bit_rate']
+                    self.meta['audio_bit_rate'] = data['bit_rate']
                     self.meta['sampling_rate'] = data['sampling_rate']
         except KeyError as key:
             raise KeyError("{} could not be found in the metadata for file '{}'".format(key, file))
@@ -54,8 +72,29 @@ class Audio:
         if not isinstance(self.meta['date_created'], str):
             raise TypeError("Creation date is not a string for file '{}'".format(file))
 
-    def print_metadata(self, *args:'str') -> None:
-        """Prints the requested metadata, or all if not specified."""
+    def print_metadata(self, *args:'list') -> None:
+        """Prints the requested metadata, or all if not specified.
+
+        Available metadata:
+        General:
+            file_name (str): complete name of the file.
+            name (str): file name without extension.
+            extension (str): extension of the file.
+            duration (int): duration of the file in ms.
+            file_size (int): size of the file in bytes.
+            format (str): format of the file.
+            date_created (str): date and time the file was created as "UCT YYYY-MM-DD hh:mm:ss.sss".
+
+        Video:
+            video_bit_rate (int): bit rate of the video in bps.
+            frame_rate (float): frame rate of the video in fps.
+            height (int): height of the video in px.
+            width (int): width of the video in px.
+
+        Audio:
+            audio_bit_rate (int): bit rate of audio in bps.
+            sampling_rate (int): sampling rate of audio in Hz
+        """
         if args:
             for arg in args:
                 try:
@@ -66,8 +105,51 @@ class Audio:
             for k,v in self.meta.items():
                 print("{}: {}".format(k,v))
 
+
+class Audio(Media):
+    """A class for an audio fragment.
+
+    Attributes:
+    meta (dict): contains the metadata of the file.
+
+    Methods:
+    print_metadata(): 
+        Prints the requested metadata, or all if not specified.
+    get_sound_intervals(min_sound_len:'int'=500, min_silence_len:'int'=500, silence_thresh:'int'=-24, seek_step:'int'=10):
+        Returns a list of sound intervals (a list containing a start and an end time in milliseconds).
+    plot_silence(min_sound_len:'int'=500, min_silence_len:'int'=500, silence_thresh:'int'=-24, seek_step:'int'=10):
+        Generates a pyplot showing sound and silence.
+    convert_audio(desired_format:'str'):
+        Converts the the audio to a new file in the desired format, and returns a new Audio object for the new file.
+    """
+
+    def convert_audio(self, desired_format:'str'):
+        """Converts the the audio to a new file in the desired format, and returns a new Audio object for the new file.
+
+        Parameters:
+        desired_format (str): desired format of the new audio file, e.g. 'mp3'.
+
+        Returns:
+        Audio object: A new audio object for the newly made file.
+        """
+        clip = mp.AudioFileClip(self.meta['file_name'])
+        new_filename = self.meta['name']+"."+desired_format.lstrip('.')
+        clip.write_audiofile(new_filename)
+        return Audio(new_filename)
+
     def get_sound_intervals(self, min_sound_len:'int'=500, min_silence_len:'int'=500, silence_thresh:'int'=-24, seek_step:'int'=10) -> list:
-        """Returns a list of sound intervals (a list containing a start and an end time in milliseconds)."""
+        """Returns a list of sound intervals (a list containing a start and an end time in milliseconds).
+        
+        Parameters:
+        min_sound_len (int): minimum length in millisecond a sound interval has to be to be detected, defaulting to 500 ms.
+        min_silence_len (int): minimum length in millisecond a silence interval has to be to be detected, defaulting to 500 ms.
+        silence_thresh (int): the upper bound for how quiet is silent in dFBS.
+        seek_step (int): step size for interating over the segment in ms.
+
+        Returns:
+        list[[start,end]]: the start and end timestamps of a sound segment, in ms.
+        """
+
         # If sound intervals weren't already generated, do so and save them to the object
         if not (hasattr(self, 'sound_intervals') and self.sound_intervals['attr'] == [min_sound_len, min_silence_len, silence_thresh, seek_step]):
             self.sound_intervals = {'attr': [min_sound_len, min_silence_len, silence_thresh, seek_step]}
@@ -77,7 +159,15 @@ class Audio:
         return self.sound_intervals
 
     def plot_silence(self, *args, **kwargs) -> None:
-        """Generates a pyplot showing sound and silence."""
+        """Generates a pyplot showing sound and silence.
+
+        Parameters:
+        min_sound_len (int): minimum length in millisecond a sound interval has to be to be detected, defaulting to 500 ms.
+        min_silence_len (int): minimum length in millisecond a silence interval has to be to be detected, defaulting to 500 ms.
+        silence_thresh (int): the upper bound for how quiet is silent in dFBS.
+        seek_step (int): step size for interating over the segment in ms.
+        """
+
         intervals = self.get_sound_intervals(*args, **kwargs)['intervals']
         xvals = [0]
         yvals = [0]
@@ -91,77 +181,36 @@ class Audio:
         plt.show()
 
 
-def get_duration(file):
-    media_info = MediaInfo.parse(file)
-    return media_info.tracks[0].to_data()['duration']
+class Video(Media):
+    """A class for an video fragment.
 
-def get_metadata(file):
-    media_info = MediaInfo.parse(file)
-    for track in media_info.tracks:
-        if track.track_type == "General":
-            print("General Track data:")
-            pprint(track.to_data())
-        elif track.track_type == "Video":
-            print("Video Track data:")
-            pprint(track.to_data())
-        elif track.track_type == "Audio":
-            print("Audio Track data:")
-            pprint(track.to_data())
+    Attributes:
+    meta (dict): contains the metadata of the file.
 
+    Methods:
+    print_metadata(): 
+        Prints the requested metadata, or all if not specified.
+    extract_audio(desired_format:'str'):
+        Extracts the audio and saves to a new file in the desired format, and returns a new Audio object.
+    """
 
-def extract_audio(filename, inputformat, outputformat):
-    clip = mp.VideoFileClip(filename+"."+inputformat)
-    clip.audio.write_audiofile(filename+"."+outputformat)
+    def extract_audio(self, desired_format:'str'):
+        """Extracts the audio and saves to a new file in the desired format, and returns a new Audio object.
 
+        Parameters:
+        desired_format (str): desired format of the new audio file, e.g. 'mp3'.
 
-def convert_audio(filename, inputformat, outputformat):
-    clip = mp.AudioFileClip(filename+"."+inputformat)
-    clip.write_audiofile(filename+"."+outputformat)
-
-
-def plot_silence(file):
-    # MAKE BETTER CHECK
-    segment = AudioSegment.from_file(file)
-
-    sound = silence.detect_nonsilent(segment, min_silence_len=500, silence_thresh=-24, seek_step=10)
-    print(sound)
-    xvals = [0]
-    yvals = [0]
-    for interval in sound:
-        if interval[1] - interval[0] >= 500:
-            xvals.append(interval[0])
-            xvals.extend(interval)
-            xvals.append(interval[1])
-            yvals.extend([0,1,1,0])
-
-    xvals.append(get_duration(file))
-    yvals.append(0)
-    print(xvals)
-    print(yvals)
-    plt.plot(xvals, yvals)
-    plt.show()
-
-    #command = ['ffmpeg', '-i', file, '-f', 'wav', '-']
-    #pipe = sp.Popen(command, stdout=sp.PIPE, bufsize = 10**8)
-    #raw = pipe.stdout.read(44100*30)
-    #arr = np.fromstring(raw, dtype="int16")
-    #print(arr)
-    #print(len(raw))
-    #print(len(arr))
-    #plt.plot(arr)
-    #plt.show()
-
-
+        Returns:
+        Audio object: A new audio object for the newly made file.
+        """
+        clip = mp.VideoFileClip(self.meta['file_name'])
+        new_filename = self.meta['name']+"."+desired_format.lstrip('.')
+        clip.audio.write_audiofile(new_filename)
+        return Audio(new_filename)
 
 
 def main(): 
-    #get_metadata("30.09.21 SudwestFryslan Raad.wav")
-    #extract_audio("30.09.21 SudwestFryslan Raad", "mp4", "mp3")
-    #convert_audio("30.09.21 SudwestFryslan Raad", "mp3", "wav")
-    #make_sound_array("sample.wav")
-    #plot_silence('30.09.21 SudwestFryslan Raad.wav')
-    test = Audio('sample.wav')
-    print(test.meta)
+    pass
 
 if __name__ == '__main__':
     main()
