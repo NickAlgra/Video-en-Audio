@@ -77,6 +77,12 @@ class TestIntValidator:
         for key, value in intval_args.items():
             assert getattr(type(polygon).sides, key) == value
         polygon.sides = 5
+
+    def test_create_invalid_min_max(self, intval_args):
+        with pytest.raises(ValueError) as ex:
+            intval_args['min_value'] = 11
+            class Polygon:
+                sides = validators.IntValidator(**intval_args)
     
     def test_invalid_type(self, polygon):
         with pytest.raises(TypeError):
@@ -118,6 +124,12 @@ class TestStringValidator:
         for key, value in strval_args.items():
             assert getattr(type(person).name, key) == value
         person.name = 'Nick'
+
+    def test_create_invalid_min_max(self, strval_args):
+        with pytest.raises(ValueError) as ex:
+            strval_args['min_length'] = 6
+            class Person:
+                name = validators.StringValidator(**strval_args)
 
     def test_invalid_type(self, person):
         with pytest.raises(TypeError):
@@ -164,6 +176,12 @@ class TestDateValidator:
         for key, value in dateval_args.items():
             assert getattr(type(calender).date, key) == value
         calender.date = "13:14:25 15/11/2020"
+
+    def test_create_invalid_min_max(self, dateval_args):
+        with pytest.raises(ValueError) as ex:
+            dateval_args['earliest'] = datetime(year=3000, month=1, day=1)
+            class Calender:
+                date = validators.DateValidator(**dateval_args)
 
     def test_invalid_type(self, calender):
         with pytest.raises(TypeError):
