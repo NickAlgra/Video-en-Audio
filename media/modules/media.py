@@ -8,8 +8,8 @@ from media.utils import validators
 
 class Metadata(enum.Enum):
     """Enumeration containing supported types of metadata and their appropriate data descriptors."""
-    def __new__(cls:type, name:str, descriptor:type=validators.BaseValidator, kwargs={}) -> 'Metadata':
-        """Create a new Metadata member.
+    def __new__(cls:type, name:str, descriptor:type=validators.BaseValidator, kwargs:dict={}) -> 'Metadata':
+        """Create a new Metadata enum member.
 
         Args:
             value (str): Name the attribute to store this metadata should have. Also used as _value_.

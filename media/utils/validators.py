@@ -1,5 +1,6 @@
 from datetime import datetime
 from collections.abc import Sequence
+from typing import Union
 
 
 class BaseValidator:
@@ -27,7 +28,17 @@ class BaseValidator:
             raise ValueError(f"{name} should not be None")
     
     @staticmethod
-    def validate_type(name, value, desired_types:tuple[type, ...]):
+    def validate_type(name, value, desired_types:Union[type, tuple[type, ...]]):
+        """Determine if value is of any of the desired types.
+
+        Args:
+            name (str): Name of the property being checked.
+            value (Any): Value of the property being checked.
+            desired_types (type | tuple[type, ...]): The types which value is allowed to be.
+
+        Raises:
+            TypeError: If value is not any of the desired types.
+        """
         if not isinstance(value, desired_types):
             raise TypeError(f"{name} should be of type {desired_types}, not type {type(value)}")
 
@@ -75,7 +86,7 @@ class IntValidator(BaseValidator):
         super().__init__()
 
         for v in (min_value, max_value):
-            self.validate_type(v, v, (int, None))
+            self.validate_type(v, v, (int, type(None)))
         if min_value is not None and max_value is not None and min_value > max_value:
             raise ValueError(f"Minimum value {min_value} cannot be greater than maximum value {max_value}")
         self.min_value = min_value
